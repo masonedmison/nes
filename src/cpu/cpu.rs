@@ -35,24 +35,72 @@ impl CPU {
     fn exec_opcode(&mut self, opcode: u8) {
         match opcode {
             // ADC - Add with Carry
-            0x69 => self.adc(self.immediate()),
-            0x65 => self.adc(self.zero_page().0),
-            0x75 => self.adc(self.zero_page_x().0),
-            0x6d => self.adc(self.absolute().0),
-            0x7d => self.adc(self.absolute_x().0),
-            0x79 => self.adc(self.absolute_y()),
-            0x61 => self.adc(self.indirect_x()),
-            0x71 => self.adc(self.indirect_y()),
+            0x69 => {
+                let v = self.immediate();
+                self.adc(v)
+            }
+            0x65 => {
+                let zero_page = self.zero_page();
+                self.adc(zero_page.0)
+            }
+            0x75 => {
+                let zero_page_x = self.zero_page_x();
+                self.adc(zero_page_x.0)
+            }
+            0x6d => {
+                let absolute = self.absolute();
+                self.adc(absolute.0)
+            }
+            0x7d => {
+                let absolute_x = self.absolute_x();
+                self.adc(absolute_x.0)
+            }
+            0x79 => {
+                let v = self.absolute_y();
+                self.adc(v)
+            }
+            0x61 => {
+                let v = self.indirect_x();
+                self.adc(v)
+            }
+            0x71 => {
+                let v = self.indirect_y();
+                self.adc(v)
+            }
             // ********
             // And - Logical AND
-            0x29 => self.and(self.immediate()),
-            0x25 => self.and(self.zero_page().0),
-            0x35 => self.and(self.zero_page_x().0),
-            0x2d => self.and(self.absolute().0),
-            0x3d => self.and(self.absolute_x().0),
-            0x39 => self.and(self.absolute_y()),
-            0x21 => self.and(self.indirect_x()),
-            0x31 => self.and(self.indirect_y()),
+            0x29 => {
+                let v = self.immediate();
+                self.and(v)
+            }
+            0x25 => {
+                let zero_page = self.zero_page();
+                self.and(zero_page.0)
+            }
+            0x35 => {
+                let zero_page_x = self.zero_page_x();
+                self.and(zero_page_x.0)
+            }
+            0x2d => {
+                let absolute = self.absolute();
+                self.and(absolute.0)
+            }
+            0x3d => {
+                let absolute_x = self.absolute_x();
+                self.and(absolute_x.0)
+            }
+            0x39 => {
+                let v = self.absolute_y();
+                self.and(v)
+            }
+            0x21 => {
+                let v = self.indirect_x();
+                self.and(v)
+            }
+            0x31 => {
+                let v = self.indirect_y();
+                self.and(v)
+            }
             // ********
             // ASL - Arithmetic Shift Left
             0x0a => {
@@ -191,23 +239,62 @@ impl CPU {
             }
             // ********
             // CMP - Compare
-            0xc9 => self.cmp(self.immediate()),
-            0xc5 => self.cmp(self.zero_page().0),
-            0xd5 => self.cmp(self.zero_page_x().0),
-            0xcd => self.cmp(self.absolute().0),
-            0xdd => self.cmp(self.absolute_x().0),
-            0xd9 => self.cmp(self.indirect_x()),
-            0xd1 => self.cmp(self.indirect_y()),
+            0xc9 => {
+                let v = self.immediate();
+                self.cmp(v)
+            }
+            0xc5 => {
+                let zero_page = self.zero_page();
+                self.cmp(zero_page.0)
+            }
+            0xd5 => {
+                let zero_page_x = self.zero_page_x();
+                self.cmp(zero_page_x.0)
+            }
+            0xcd => {
+                let absolute = self.absolute();
+                self.cmp(absolute.0)
+            }
+            0xdd => {
+                let absolute_x = self.absolute_x();
+                self.cmp(absolute_x.0)
+            }
+            0xd9 => {
+                let v = self.indirect_x();
+                self.cmp(v)
+            }
+            0xd1 => {
+                let v = self.indirect_y();
+                self.cmp(v)
+            }
             // ********
             // CPX - Compare X Register
-            0xe0 => self.cpx(self.immediate()),
-            0xe4 => self.cpx(self.zero_page().0),
-            0xec => self.cpx(self.absolute().0),
+            0xe0 => {
+                let v = self.immediate();
+                self.cpx(v)
+            }
+            0xe4 => {
+                let zero_page = self.zero_page();
+                self.cpx(zero_page.0)
+            }
+            0xec => {
+                let absolute = self.absolute();
+                self.cpx(absolute.0)
+            }
             // ********
             // CPY - Compare Y Register
-            0xc0 => self.cpy(self.immediate()),
-            0xc4 => self.cpy(self.zero_page().0),
-            0xcc => self.cpy(self.absolute().0),
+            0xc0 => {
+                let v = self.immediate();
+                self.cpy(v)
+            }
+            0xc4 => {
+                let zero_page = self.zero_page();
+                self.cpy(zero_page.0)
+            }
+            0xcc => {
+                let absolute = self.absolute();
+                self.cpy(absolute.0)
+            }
             // ********
             // DEC - Decrement Memory
             0xc6 => {
@@ -248,14 +335,38 @@ impl CPU {
             }
             // ********
             // EOR - Exclusive OR
-            0x49 => self.eor(self.immediate()),
-            0x45 => self.eor(self.zero_page().0),
-            0x55 => self.eor(self.zero_page_x().0),
-            0x4d => self.eor(self.absolute().0),
-            0x5d => self.eor(self.absolute_x().0),
-            0x59 => self.eor(self.absolute_y()),
-            0x41 => self.eor(self.indirect_x()),
-            0x51 => self.eor(self.indirect_y()),
+            0x49 => {
+                let v = self.immediate();
+                self.eor(v)
+            }
+            0x45 => {
+                let zero_page = self.zero_page();
+                self.eor(zero_page.0)
+            }
+            0x55 => {
+                let zero_page_x = self.zero_page_x();
+                self.eor(zero_page_x.0)
+            }
+            0x4d => {
+                let absolute = self.absolute();
+                self.eor(absolute.0)
+            }
+            0x5d => {
+                let absolute_x = self.absolute_x();
+                self.eor(absolute_x.0)
+            }
+            0x59 => {
+                let v = self.absolute_y();
+                self.eor(v)
+            }
+            0x41 => {
+                let v = self.indirect_x();
+                self.eor(v)
+            }
+            0x51 => {
+                let v = self.indirect_y();
+                self.eor(v)
+            }
             // ********
             // INC - Increment Memory
             0xe6 => {
@@ -314,38 +425,93 @@ impl CPU {
             // ********
             // JSR - Jump to Subroutine
             0x20 => {
+                let (lo_ret, hi_ret) = as_lo_hi(self.pc + 2);
+                self.stack_push(hi_ret);
+                self.stack_push(lo_ret);
+
                 let lo = self.bus.read_memory(self.pc + 1);
                 let hi = self.bus.read_memory(self.pc + 2);
                 let addr = join_hi_low(lo, hi);
-                let (lo_ret, hi_ret) = as_lo_hi(addr - 1);
-                self.stack_push(hi_ret);
-                self.stack_push(lo_ret);
                 self.pc = addr
             }
             // ********
             // LDA - Load Accumulator
-            0xa9 => self.lda(self.immediate()),
-            0xa5 => self.lda(self.zero_page().0),
-            0xb5 => self.lda(self.zero_page_x().0),
-            0xad => self.lda(self.absolute().0),
-            0xbd => self.lda(self.absolute_x().0),
-            0xb9 => self.lda(self.absolute_y()),
-            0xa1 => self.lda(self.indirect_x()),
-            0xb1 => self.lda(self.indirect_y()),
+            0xa9 => {
+                let v = self.immediate();
+                self.lda(v)
+            }
+            0xa5 => {
+                let zero_page = self.zero_page();
+                self.lda(zero_page.0)
+            }
+            0xb5 => {
+                let zero_page_x = self.zero_page_x();
+                self.lda(zero_page_x.0)
+            }
+            0xad => {
+                let absolute = self.absolute();
+                self.lda(absolute.0)
+            }
+            0xbd => {
+                let absolute_x = self.absolute_x();
+                self.lda(absolute_x.0)
+            }
+            0xb9 => {
+                let v = self.absolute_y();
+                self.lda(v)
+            }
+            0xa1 => {
+                let v = self.indirect_x();
+                self.lda(v)
+            }
+            0xb1 => {
+                let v = self.indirect_y();
+                self.lda(v)
+            }
             // ********
             // LDX - Load X Register
-            0xa2 => self.ldx(self.immediate()),
-            0xa6 => self.ldx(self.zero_page().0),
-            0xb6 => self.ldx(self.zero_page_y()),
-            0xae => self.ldx(self.absolute().0),
-            0xbe => self.ldx(self.absolute_y()),
+            0xa2 => {
+                let v = self.immediate();
+                self.ldx(v)
+            }
+            0xa6 => {
+                let zero_page = self.zero_page();
+                self.ldx(zero_page.0)
+            }
+            0xb6 => {
+                let v = self.zero_page_y();
+                self.ldx(v)
+            }
+            0xae => {
+                let absolute = self.absolute();
+                self.ldx(absolute.0)
+            }
+            0xbe => {
+                let v = self.absolute_y();
+                self.ldx(v)
+            }
             // ********
             // LDY - Load Y Register
-            0xa0 => self.ldy(self.immediate()),
-            0xa4 => self.ldy(self.zero_page().0),
-            0xb4 => self.ldy(self.zero_page_x().0),
-            0xac => self.ldy(self.absolute().0),
-            0xbc => self.ldy(self.absolute_x().0),
+            0xa0 => {
+                let v = self.immediate();
+                self.ldy(v)
+            }
+            0xa4 => {
+                let zero_page = self.zero_page();
+                self.ldy(zero_page.0)
+            }
+            0xb4 => {
+                let zero_page_x = self.zero_page_x();
+                self.ldy(zero_page_x.0)
+            }
+            0xac => {
+                let absolute = self.absolute();
+                self.ldy(absolute.0)
+            }
+            0xbc => {
+                let absolute_x = self.absolute_x();
+                self.ldy(absolute_x.0)
+            }
             // ********
             // LSR - Logical Shift Right
             0x4a => {
@@ -377,14 +543,38 @@ impl CPU {
             0xea => self.pc += 1,
             // ********
             // ORA - Logical Inclusive OR
-            0x09 => self.ora(self.immediate()),
-            0x05 => self.ora(self.zero_page().0),
-            0x15 => self.ora(self.zero_page_x().0),
-            0x0d => self.ora(self.absolute().0),
-            0x1d => self.ora(self.absolute_x().0),
-            0x19 => self.ora(self.absolute_y()),
-            0x01 => self.ora(self.indirect_x()),
-            0x11 => self.ora(self.indirect_y()),
+            0x09 => {
+                let v = self.immediate();
+                self.ora(v)
+            }
+            0x05 => {
+                let zero_page = self.zero_page();
+                self.ora(zero_page.0)
+            }
+            0x15 => {
+                let zero_page_x = self.zero_page_x();
+                self.ora(zero_page_x.0)
+            }
+            0x0d => {
+                let absolute = self.absolute();
+                self.ora(absolute.0)
+            }
+            0x1d => {
+                let absolute_x = self.absolute_x();
+                self.ora(absolute_x.0)
+            }
+            0x19 => {
+                let v = self.absolute_y();
+                self.ora(v)
+            }
+            0x01 => {
+                let v = self.indirect_x();
+                self.ora(v)
+            }
+            0x11 => {
+                let v = self.indirect_y();
+                self.ora(v)
+            }
             // ********
             // PHA - Push Accumulator
             0x48 => {
@@ -408,28 +598,241 @@ impl CPU {
             }
             // ********
             // PLP - Pull Processor Status
-            // TODO the processor flag status changes here are not 100% clear to me
             0x28 => {
                 let next_st = self.stack_pop();
                 self.st = next_st;
                 self.pc += 1
-            } 
+            }
             // ********
             // ROL - Rotate Left
-            // TODO left off here...
+            0x2a => {
+                self.accum = self.rol(self.accum);
+                self.pc += 1
+            }
+            0x26 => {
+                let (v, addr) = self.zero_page();
+                let result = self.rol(v);
+                self.bus.write_memory(addr, result);
+            }
+            0x36 => {
+                let (v, addr) = self.zero_page_x();
+                let result = self.rol(v);
+                self.bus.write_memory(addr, result);
+            }
+            0x2e => {
+                let (v, addr) = self.absolute();
+                let result = self.rol(v);
+                self.bus.write_memory(addr, result);
+            }
+            0x3e => {
+                let (v, addr) = self.absolute_x();
+                let result = self.rol(v);
+                self.bus.write_memory(addr, result);
+            }
             // ********
+            // ROR - Rotate Right
+            0x6a => {
+                self.accum = self.ror(self.accum);
+                self.pc += 1
+            }
+            0x66 => {
+                let (v, addr) = self.zero_page();
+                let result = self.ror(v);
+                self.bus.write_memory(addr, result);
+            }
+            0x76 => {
+                let (v, addr) = self.zero_page_x();
+                let result = self.ror(v);
+                self.bus.write_memory(addr, result);
+            }
+            0x6e => {
+                let (v, addr) = self.absolute();
+                let result = self.ror(v);
+                self.bus.write_memory(addr, result);
+            }
+            0x7e => {
+                let (v, addr) = self.absolute_x();
+                let result = self.ror(v);
+                self.bus.write_memory(addr, result);
+            }
+            // ********
+            // RTI - Return from Interrupt
+            0x40 => {
+                self.st = self.stack_pop();
+                let lo = self.stack_pop();
+                let hi = self.stack_pop();
+                self.pc = join_hi_low(lo, hi);
+            }
+            // ********
+            // RTS - Return from Subroutine
+            0x60 => {
+                let lo = self.stack_pop();
+                let hi = self.stack_pop();
+                self.pc = join_hi_low(lo, hi).wrapping_add(1)
+            }
+            // ********
+            // SBC - Subtract with Carry
+            0xe9 => {
+                let v = self.immediate();
+                self.sbc(v)
+            }
+            0xe5 => {
+                let zero_page = self.zero_page();
+                self.sbc(zero_page.0)
+            }
+            0xf5 => {
+                let zero_page_x = self.zero_page_x();
+                self.sbc(zero_page_x.0)
+            }
+            0xed => {
+                let absolute = self.absolute();
+                self.sbc(absolute.0)
+            }
+            0xfd => {
+                let absolute_x = self.absolute_x();
+                self.sbc(absolute_x.0)
+            }
+            0xf9 => {
+                let v = self.absolute_y();
+                self.sbc(v)
+            }
+            0xe1 => {
+                let v = self.indirect_x();
+                self.sbc(v)
+            }
+            0xf1 => {
+                let v = self.indirect_y();
+                self.sbc(v)
+            }
+            // ********
+            // SEC - Set Carry Flag
+            0x38 => {
+                self.set_carry();
+                self.pc += 1
+            }
+            // ********
+            // SED - Set Decimal Flag
+            0xf8 => {
+                self.set_decimal();
+                self.pc += 1
+            }
+            // ********
+            // SEI - Set Interrupt Disable
+            0x78 => {
+                self.set_interrupt_disable();
+                self.pc += 1
+            }
+            // ********
+            // STA - Store Accumulator
+            0x85 => {
+                let zero_page = self.zero_page();
+                self.sta(zero_page.0)
+            }
+            0x95 => {
+                let zero_page_x = self.zero_page_x();
+                self.sta(zero_page_x.0)
+            }
+            0x8d => {
+                let absolute = self.absolute();
+                self.sta(absolute.0)
+            }
+            0x9d => {
+                let absolute_x = self.absolute_x();
+                self.sta(absolute_x.0)
+            }
+            0x99 => {
+                let v = self.absolute_y();
+                self.sta(v)
+            }
+            0x81 => {
+                let v = self.indirect_x();
+                self.sta(v)
+            }
+            0x91 => {
+                let v = self.indirect_y();
+                self.sta(v)
+            }
+            // ********
+            // STX - Store X Register
+            0x86 => {
+                let zero_page = self.zero_page();
+                self.stx(zero_page.0)
+            }
+            0x96 => {
+                let v = self.zero_page_y();
+                self.stx(v)
+            }
+            0x8e => {
+                let absolute = self.absolute();
+                self.stx(absolute.0)
+            }
+            // ********
+            // STY - Store Y Register
+            0x84 => {
+                let zero_page = self.zero_page();
+                self.stx(zero_page.0)
+            }
+            0x94 => {
+                let zero_page_x = self.zero_page_x();
+                self.stx(zero_page_x.0)
+            }
+            0x8c => {
+                let absolute = self.absolute();
+                self.stx(absolute.0)
+            }
+            // ********
+            // TAY - Transfer Accumulator to Y
+            0xa8 => {
+                self.ry = self.accum;
+                self.cond_set_zero(self.ry == 0);
+                self.cond_set_neg(msb(self.ry) == 1);
+                self.pc += 1
+            }
+            // ********
+            // TSX - Transfer Stack Pointer to X
+            0xba => {
+                self.rx = self.sp;
+                self.cond_set_zero(self.rx == 0);
+                self.cond_set_neg(msb(self.rx) == 1);
+                self.pc += 1
+            }
+            // ********
+            // TXA - Transfer X to Accumulator
+            0x8a => {
+                self.accum = self.rx;
+                self.cond_set_zero(self.accum == 0);
+                self.cond_set_neg(msb(self.accum) == 1);
+                self.pc += 1
+            }
+            // ********
+            // TXS - Transfer X to Stack Pointer
+            0x9a => {
+                self.sp = self.rx;
+                self.pc += 1
+            }
+            // ********
+            // TYA - Transfer Y to Accumulator
+            0x98 => {
+                self.accum = self.ry;
+                self.cond_set_zero(self.accum == 0);
+                self.cond_set_neg(msb(self.accum) == 1);
+                self.pc += 1
+            }
+            // ********
+            _ => panic!("Unexpected opcode found: {}", opcode),
         }
     }
 
     fn adc(&mut self, v: u8) {
         let next_accum = self.accum as u16 + (v as u16) + (self.st & CARRY_FLAG) as u16;
         let wrapped_accum = next_accum as u8;
-        // TODO double check
-        self.cond_set_overflow(msb(self.accum ^ wrapped_accum) & (v ^ wrapped_accum) == 1);
+
+        let overflow = !(self.accum ^ v) & (self.accum ^ wrapped_accum) & 0x80;
+        self.st |= overflow;
 
         self.cond_set_carry(next_accum > 0xff);
 
-        self.cond_set_zero(next_accum == 0);
+        self.cond_set_zero(wrapped_accum == 0);
 
         self.cond_set_neg(msb(wrapped_accum) == 1);
 
@@ -549,6 +952,37 @@ impl CPU {
         self.cond_set_zero(result == 0);
         self.cond_set_neg(msb(result) == 1);
         self.accum = result
+    }
+    fn rol(&mut self, v: u8) -> u8 {
+        let result = ((v << 1) & 0xfe) | self.get_st(CARRY_FLAG - 1);
+
+        self.set_st_to(CARRY_FLAG - 1, msb(v));
+        self.cond_set_neg(msb(result) == 1);
+        // TODO do we always set this or only in the case of the A addressing mode?
+        self.cond_set_zero(result == 0);
+        result
+    }
+    fn ror(&mut self, v: u8) -> u8 {
+        let result = (v >> 1) | self.get_st(CARRY_FLAG - 1) << 7;
+
+        self.set_st_to(CARRY_FLAG - 1, v & 0x01);
+        self.cond_set_neg(msb(result) == 1);
+        // TODO do we always set this or only in the case of the A addressing mode?
+        self.cond_set_zero(result == 0);
+        result
+    }
+    // from https://stackoverflow.com/questions/29193303/6502-emulation-proper-way-to-implement-adc-and-sbc
+    fn sbc(&mut self, v: u8) {
+        self.adc(!v)
+    }
+    fn sta(&mut self, v: u8) {
+        self.accum = v
+    }
+    fn stx(&mut self, v: u8) {
+        self.rx = v
+    }
+    fn sty(&mut self, v: u8) {
+        self.rx = v
     }
 
     // Indexed adressing functions
