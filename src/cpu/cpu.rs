@@ -1,13 +1,22 @@
 use crate::{
     bus::Bus,
+    cartridge::Cartridge,
+    debug::CpuState,
     utils::{as_lo_hi, get_bit, join_hi_low, msb},
 };
 
-// flag locations for processor status register
+// flag locations (1-indexed) for processor status register
 const CARRY_FLAG: u8 = 0x01;
 const ZERO_FLAG: u8 = 0x02;
 const INTERRUPT_DISABLE: u8 = 0x03;
 const DECIMAL_MODE: u8 = 0x04;
+/**
+ *  Instruction 	B 	Side effects after pushing
+ *  /IRQ 	0 	I is set to 1
+ *  /NMI 	0 	I is set to 1
+ *   BRK 	1 	I is set to 1
+ *   PHP 	1 	None
+ */
 const BRK_CMD: u8 = 0x05;
 const OVERFLOW_FLAG: u8 = 0x07;
 const NEGATIVE_FLAG: u8 = 0x08;
@@ -17,7 +26,7 @@ const NON_MASKABLE_IH: u16 = 0xfffa;
 const POWER_RESET_IH: u16 = 0xfffc;
 const BRK_IH: u16 = 0xfffe;
 
-struct CPU {
+pub struct CPU {
     pc: u16,
     sp: u8,
     accum: u8,
@@ -28,10 +37,44 @@ struct CPU {
 }
 
 impl CPU {
+    pub fn new() -> CPU {
+        let bus = Bus::new();
+        // TODO setting this to match starting state of nestest.nes
+        CPU {
+            pc: 0xC000,
+            sp: 0xfd,
+            accum: 0,
+            rx: 0,
+            ry: 0,
+            st: 0x24,
+            bus,
+        }
+    }
+    pub fn load_cartridge(&mut self, cartridge: Cartridge) {
+        self.bus.load_rom(cartridge.bytes)
+    }
+
+    pub fn run_debug(&mut self) {
+        loop {
+            let opcode = self.bus.read_memory(self.pc);
+            self.debug_exec(opcode)
+        }
+    }
+    fn debug_exec(&mut self, opcode: u8) {
+        let mut state = CpuState::default();
+        state.opcode = opcode;
+        state.addr = self.pc;
+        state.a = self.accum;
+        state.x = self.rx;
+        state.y = self.ry;
+        state.sp = self.sp;
+        state.p = self.st;
+
+        println!("{}", state.render());
+
+        self.exec_opcode(opcode);
+    }
     // TODO consider timing? (e.g. how many cycles instruction each runs)
-    // TODO what should this return -- some state?
-    // TODO consider how mirroring will work. should this be handled by the bus or the cpu
-    //   answered: handled by the bus for the time being
     fn exec_opcode(&mut self, opcode: u8) {
         match opcode {
             // ADC - Add with Carry
@@ -56,15 +99,15 @@ impl CPU {
                 self.adc(absolute_x.0)
             }
             0x79 => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.adc(v)
             }
             0x61 => {
-                let v = self.indirect_x();
+                let (v, _) = self.indirect_x();
                 self.adc(v)
             }
             0x71 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.adc(v)
             }
             // ********
@@ -90,15 +133,15 @@ impl CPU {
                 self.and(absolute_x.0)
             }
             0x39 => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.and(v)
             }
             0x21 => {
-                let v = self.indirect_x();
+                let (v, _) = self.indirect_x();
                 self.and(v)
             }
             0x31 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.and(v)
             }
             // ********
@@ -217,25 +260,25 @@ impl CPU {
             // CLC - Clear Carry Flag
             0x18 => {
                 self.clear_carry();
-                self.pc += 2
+                self.pc += 1
             }
             // ********
             // CLD - Clear Decimal Mode
             0xd8 => {
                 self.clear_decmimal();
-                self.pc += 2
+                self.pc += 1
             }
             // ********
             // CLI - Clear Interrupt Disable
             0x58 => {
                 self.clear_interrupt_disable();
-                self.pc += 2
+                self.pc += 1
             }
             // ********
             // CLV - Clear Overflow Flag
             0xb8 => {
                 self.clear_overflow();
-                self.pc += 2
+                self.pc += 1
             }
             // ********
             // CMP - Compare
@@ -260,11 +303,15 @@ impl CPU {
                 self.cmp(absolute_x.0)
             }
             0xd9 => {
-                let v = self.indirect_x();
+                let (v, _) = self.absolute_y();
+                self.cmp(v)
+            }
+            0xc1 => {
+                let (v, _) = self.indirect_x();
                 self.cmp(v)
             }
             0xd1 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.cmp(v)
             }
             // ********
@@ -323,7 +370,8 @@ impl CPU {
                 let result = self.rx.wrapping_sub(1);
                 self.cond_set_zero(result == 0);
                 self.cond_set_neg(msb(result) == 1);
-                self.rx = result
+                self.rx = result;
+                self.pc += 1
             }
             // ********
             // DEY - Decrement Y Register
@@ -331,7 +379,8 @@ impl CPU {
                 let result = self.ry.wrapping_sub(1);
                 self.cond_set_zero(result == 0);
                 self.cond_set_neg(msb(result) == 1);
-                self.ry = result
+                self.ry = result;
+                self.pc += 1
             }
             // ********
             // EOR - Exclusive OR
@@ -356,15 +405,15 @@ impl CPU {
                 self.eor(absolute_x.0)
             }
             0x59 => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.eor(v)
             }
             0x41 => {
-                let v = self.indirect_x();
+                let (v, _) = self.indirect_x();
                 self.eor(v)
             }
             0x51 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.eor(v)
             }
             // ********
@@ -395,7 +444,8 @@ impl CPU {
                 let result = self.rx.wrapping_add(1);
                 self.cond_set_zero(result == 0);
                 self.cond_set_neg(msb(result) == 1);
-                self.rx = result
+                self.rx = result;
+                self.pc += 1
             }
             // ********
             // INY - Increment Y Register
@@ -403,7 +453,8 @@ impl CPU {
                 let result = self.ry.wrapping_add(1);
                 self.cond_set_zero(result == 0);
                 self.cond_set_neg(msb(result) == 1);
-                self.ry = result
+                self.ry = result;
+                self.pc += 1
             }
             // ********
             // JMP - Jump
@@ -414,12 +465,22 @@ impl CPU {
                 self.pc = addr
             }
             0x6c => {
-                /* Indirect JMP */
+                /*
+                Indirect JMP
+                NB:
+                   An original 6502 has does not correctly fetch the target address if the indirect vector
+                   falls on a page boundary (e.g. $xxFF where xx is any value from $00 to $FF). In this case
+                   fetches the LSB from $xxFF as expected but takes the MSB from $xx00. This is fixed in
+                   some later chips like the 65SC02 so for compatibility always ensure the indirect
+                    vector is not at the end of the page.
+                */
                 let lo_ind = self.bus.read_memory(self.pc + 1);
                 let hi_ind = self.bus.read_memory(self.pc + 2);
-                let addr_ind = join_hi_low(lo_ind, hi_ind);
-                let lo = self.bus.read_memory(addr_ind);
-                let hi = self.bus.read_memory(addr_ind + 1);
+                let page_addr = (hi_ind as u16) << 8;
+                let lo = self.bus.read_memory(page_addr | lo_ind as u16);
+                let hi = self
+                    .bus
+                    .read_memory(page_addr | (lo_ind.wrapping_add(1)) as u16);
                 self.pc = join_hi_low(lo, hi)
             }
             // ********
@@ -457,15 +518,15 @@ impl CPU {
                 self.lda(absolute_x.0)
             }
             0xb9 => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.lda(v)
             }
             0xa1 => {
-                let v = self.indirect_x();
+                let (v, _) = self.indirect_x();
                 self.lda(v)
             }
             0xb1 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.lda(v)
             }
             // ********
@@ -479,7 +540,7 @@ impl CPU {
                 self.ldx(zero_page.0)
             }
             0xb6 => {
-                let v = self.zero_page_y();
+                let (v, _) = self.zero_page_y();
                 self.ldx(v)
             }
             0xae => {
@@ -487,7 +548,7 @@ impl CPU {
                 self.ldx(absolute.0)
             }
             0xbe => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.ldx(v)
             }
             // ********
@@ -564,15 +625,15 @@ impl CPU {
                 self.ora(absolute_x.0)
             }
             0x19 => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.ora(v)
             }
             0x01 => {
-                let v = self.indirect_x();
+                let (v, _) = self.indirect_x();
                 self.ora(v)
             }
             0x11 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.ora(v)
             }
             // ********
@@ -584,6 +645,7 @@ impl CPU {
             // ********
             // PHP - Push Processor Status
             0x08 => {
+                self.clear_brk();
                 self.stack_push(self.st);
                 self.pc += 1
             }
@@ -693,15 +755,15 @@ impl CPU {
                 self.sbc(absolute_x.0)
             }
             0xf9 => {
-                let v = self.absolute_y();
+                let (v, _) = self.absolute_y();
                 self.sbc(v)
             }
             0xe1 => {
-                let v = self.indirect_x();
+                let (v, _) = self.indirect_x();
                 self.sbc(v)
             }
             0xf1 => {
-                let v = self.indirect_y();
+                let (v, _) = self.indirect_y();
                 self.sbc(v)
             }
             // ********
@@ -725,60 +787,68 @@ impl CPU {
             // ********
             // STA - Store Accumulator
             0x85 => {
-                let zero_page = self.zero_page();
-                self.sta(zero_page.0)
+                let (_, addr) = self.zero_page();
+                self.bus.write_memory(addr, self.accum)
             }
             0x95 => {
-                let zero_page_x = self.zero_page_x();
-                self.sta(zero_page_x.0)
+                let (_, addr) = self.zero_page_x();
+                self.bus.write_memory(addr, self.accum)
             }
             0x8d => {
-                let absolute = self.absolute();
-                self.sta(absolute.0)
+                let (_, addr) = self.absolute();
+                self.bus.write_memory(addr, self.accum)
             }
             0x9d => {
-                let absolute_x = self.absolute_x();
-                self.sta(absolute_x.0)
+                let (_, addr) = self.absolute_x();
+                self.bus.write_memory(addr, self.accum)
             }
             0x99 => {
-                let v = self.absolute_y();
-                self.sta(v)
+                let (_, addr) = self.absolute_y();
+                self.bus.write_memory(addr, self.accum)
             }
             0x81 => {
-                let v = self.indirect_x();
-                self.sta(v)
+                let (_, addr) = self.indirect_x();
+                self.bus.write_memory(addr, self.accum)
             }
             0x91 => {
-                let v = self.indirect_y();
-                self.sta(v)
+                let (_, addr) = self.indirect_y();
+                self.bus.write_memory(addr, self.accum)
             }
             // ********
             // STX - Store X Register
             0x86 => {
-                let zero_page = self.zero_page();
-                self.stx(zero_page.0)
+                let (_, addr) = self.zero_page();
+                self.bus.write_memory(addr, self.rx)
             }
             0x96 => {
-                let v = self.zero_page_y();
-                self.stx(v)
+                let (_, addr) = self.zero_page_y();
+                self.bus.write_memory(addr, self.rx)
             }
             0x8e => {
-                let absolute = self.absolute();
-                self.stx(absolute.0)
+                let (_, addr) = self.absolute();
+                self.bus.write_memory(addr, self.rx)
             }
             // ********
             // STY - Store Y Register
             0x84 => {
-                let zero_page = self.zero_page();
-                self.stx(zero_page.0)
+                let (_, addr) = self.zero_page();
+                self.bus.write_memory(addr, self.ry)
             }
             0x94 => {
-                let zero_page_x = self.zero_page_x();
-                self.stx(zero_page_x.0)
+                let (_, addr) = self.zero_page_x();
+                self.bus.write_memory(addr, self.ry)
             }
             0x8c => {
-                let absolute = self.absolute();
-                self.stx(absolute.0)
+                let (_, addr) = self.absolute();
+                self.bus.write_memory(addr, self.ry)
+            }
+            // ********
+            // TAX - Transfer Accumulator to X
+            0xaa => {
+                self.rx = self.accum;
+                self.cond_set_zero(self.rx == 0);
+                self.cond_set_neg(msb(self.rx) == 1);
+                self.pc += 1
             }
             // ********
             // TAY - Transfer Accumulator to Y
@@ -819,7 +889,9 @@ impl CPU {
                 self.pc += 1
             }
             // ********
-            _ => panic!("Unexpected opcode found: {}", opcode),
+            _ => {
+                panic!("Unexpected opcode found: {:#x}\nSkipping...", opcode)
+            }
         }
     }
 
@@ -827,8 +899,8 @@ impl CPU {
         let next_accum = self.accum as u16 + (v as u16) + (self.st & CARRY_FLAG) as u16;
         let wrapped_accum = next_accum as u8;
 
-        let overflow = !(self.accum ^ v) & (self.accum ^ wrapped_accum) & 0x80;
-        self.st |= overflow;
+        let overflow = msb(!(self.accum ^ v) & (self.accum ^ wrapped_accum));
+        self.set_st_to(OVERFLOW_FLAG - 1, overflow);
 
         self.cond_set_carry(next_accum > 0xff);
 
@@ -852,8 +924,9 @@ impl CPU {
     fn asl(&mut self, v: u8) -> u8 {
         self.cond_set_carry(msb(v) == 1);
 
-        let next_v = v << 1;
+        let next_v = v.wrapping_shl(1);
         self.cond_set_neg(msb(next_v) == 1);
+        self.cond_set_zero(next_v == 0);
 
         next_v
     }
@@ -872,34 +945,36 @@ impl CPU {
         // push current pc and status flag to stack (in that orer)
         self.stack_push(hi_pc);
         self.stack_push(low_pc);
-        self.stack_push(self.st);
+
+        // push st with brk flag set
+        // there is no need to actually update the cpu st register.
+        let p = self.st | 1 << BRK_CMD - 1;
+        self.stack_push(p);
 
         // load IRQ interrupt vector
         let low_addr = self.bus.read_memory(BRK_IH);
         let hi_addr = self.bus.read_memory(BRK_IH + 1);
 
         let ih_addr = join_hi_low(low_addr, hi_addr);
-        self.pc = ih_addr;
-
-        self.set_brk()
+        self.pc = ih_addr
     }
 
     fn cmp(&mut self, v: u8) {
         self.cond_set_carry(self.accum >= v);
         self.cond_set_zero(self.accum == v);
-        let result = self.accum - v;
+        let result = self.accum.wrapping_sub(v);
         self.cond_set_neg(msb(result) == 1);
     }
     fn cpx(&mut self, v: u8) {
         self.cond_set_carry(self.rx >= v);
         self.cond_set_zero(self.rx == v);
-        let result = self.rx - v;
+        let result = self.rx.wrapping_sub(v);
         self.cond_set_neg(msb(result) == 1);
     }
     fn cpy(&mut self, v: u8) {
         self.cond_set_carry(self.ry >= v);
         self.cond_set_zero(self.ry == v);
-        let result = self.ry - v;
+        let result = self.ry.wrapping_sub(v);
         self.cond_set_neg(msb(result) == 1);
     }
     fn dec(&mut self, v: u8) -> u8 {
@@ -975,15 +1050,6 @@ impl CPU {
     fn sbc(&mut self, v: u8) {
         self.adc(!v)
     }
-    fn sta(&mut self, v: u8) {
-        self.accum = v
-    }
-    fn stx(&mut self, v: u8) {
-        self.rx = v
-    }
-    fn sty(&mut self, v: u8) {
-        self.rx = v
-    }
 
     // Indexed adressing functions
     // ** These functions update the program counter **
@@ -1007,12 +1073,12 @@ impl CPU {
         self.pc += 2;
         (result, addr as u16)
     }
-    fn zero_page_y(&mut self) -> u8 {
+    fn zero_page_y(&mut self) -> (u8, u16) {
         let arg = self.bus.read_memory(self.pc + 1);
         let addr = arg.wrapping_add(self.ry);
         let result = self.bus.read_memory(addr as u16);
         self.pc += 2;
-        result
+        (result, addr as u16)
     }
     fn absolute(&mut self) -> (u8, u16) {
         let lo = self.bus.read_memory(self.pc + 1);
@@ -1025,20 +1091,20 @@ impl CPU {
     fn absolute_x(&mut self) -> (u8, u16) {
         let lo = self.bus.read_memory(self.pc + 1);
         let hi = self.bus.read_memory(self.pc + 2);
-        let addr = join_hi_low(lo, hi);
-        let result = self.bus.read_memory(addr + (self.rx as u16));
+        let addr = join_hi_low(lo, hi).wrapping_add(self.rx as u16);
+        let result = self.bus.read_memory(addr);
         self.pc += 3;
         (result, addr)
     }
-    fn absolute_y(&mut self) -> u8 {
+    fn absolute_y(&mut self) -> (u8, u16) {
         let lo = self.bus.read_memory(self.pc + 1);
         let hi = self.bus.read_memory(self.pc + 2);
-        let addr = join_hi_low(lo, hi);
-        let result = self.bus.read_memory(addr + (self.ry as u16));
+        let addr = join_hi_low(lo, hi).wrapping_add(self.ry as u16);
+        let result = self.bus.read_memory(addr);
         self.pc += 3;
-        result
+        (result, addr)
     }
-    fn indirect_x(&mut self) -> u8 {
+    fn indirect_x(&mut self) -> (u8, u16) {
         let arg = self.bus.read_memory(self.pc + 1);
         let lo = self.bus.read_memory(arg.wrapping_add(self.rx) as u16);
         let hi = self
@@ -1047,16 +1113,16 @@ impl CPU {
         let addr = join_hi_low(lo, hi);
         let result = self.bus.read_memory(addr);
         self.pc += 2;
-        result
+        (result, addr)
     }
-    fn indirect_y(&mut self) -> u8 {
+    fn indirect_y(&mut self) -> (u8, u16) {
         let arg = self.bus.read_memory(self.pc + 1);
         let lo = self.bus.read_memory(arg as u16);
         let hi = self.bus.read_memory(arg.wrapping_add(1) as u16);
-        let addr = join_hi_low(lo, hi) + (self.ry as u16);
+        let addr = join_hi_low(lo, hi).wrapping_add(self.ry as u16);
         let result = self.bus.read_memory(addr);
         self.pc += 2;
-        result
+        (result, addr)
     }
     // ********
 
@@ -1144,7 +1210,12 @@ impl CPU {
      * to ensure v is either 0 or 1.
      */
     fn set_st_to(&mut self, n: u8, v: u8) {
-        self.st |= (v & 0x01) << n
+        let bit = v & 0x01;
+        if bit == 1 {
+            self.st |= v << n
+        } else {
+            self.st &= !(1 << n)
+        }
     }
     fn clear_st(&mut self, n: u8) {
         self.st &= !(1 << n)
@@ -1152,20 +1223,24 @@ impl CPU {
     // ********
 
     /* Stack Functions
-    self.sp points to the value currently on "top" of the stack.
+    self.sp points to the next value avaiable on the stack.
     If an address (e.g. a u16 value) is "pushed" onto the stack, we should
-    remain consistent in that we push the hi byte first, _then_ the low byte
+    remain consistent in that we push the hi byte first, _then_ the low byte.
     */
     fn stack_push(&mut self, byte: u8) {
-        self.sp = self.sp.wrapping_sub(1);
         let addr = 0x100 + self.sp as u16;
-        self.bus.write_memory(addr, byte)
+        self.bus.write_memory(addr, byte);
+        self.sp = self.sp.wrapping_sub(1);
     }
     fn stack_pop(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
         let addr = 0x100 + self.sp as u16;
         let result = self.bus.read_memory(addr);
-        self.sp = self.sp.wrapping_add(1);
         result
     }
     // ********
 }
+
+#[cfg(test)]
+#[path = "cpu_test.rs"]
+mod cpu_test;

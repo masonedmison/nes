@@ -13,6 +13,9 @@ pub fn as_lo_hi(addr: u16) -> (u8, u8) {
     ((addr & 0xff) as u8, ((addr >> 0x8) & 0xff) as u8)
 }
 
+/**
+ * Get the nth bit (0-indexed) from byte
+ */
 pub fn get_bit(byte: &u8, n: u8) -> u8 {
-    byte >> n & 0x01
+    (byte >> n) & 0x01
 }
