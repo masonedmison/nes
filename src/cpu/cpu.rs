@@ -1153,16 +1153,6 @@ impl CPU {
     fn clear_zero(&mut self) {
         self.clear_st(ZERO_FLAG - 1)
     }
-    fn cond_set_overflow(&mut self, cond: bool) {
-        if cond {
-            self.set_overflow()
-        } else {
-            self.clear_overflow()
-        }
-    }
-    fn set_overflow(&mut self) {
-        self.set_st(OVERFLOW_FLAG - 1)
-    }
     fn clear_overflow(&mut self) {
         self.clear_st(OVERFLOW_FLAG - 1)
     }
@@ -1180,9 +1170,6 @@ impl CPU {
         self.clear_st(NEGATIVE_FLAG - 1)
     }
 
-    fn set_brk(&mut self) {
-        self.set_st(BRK_CMD - 1)
-    }
     fn clear_brk(&mut self) {
         self.clear_st(BRK_CMD - 1)
     }
