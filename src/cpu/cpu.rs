@@ -50,7 +50,19 @@ impl CPU {
             bus,
         }
     }
+
+    fn reset(&mut self) {
+        self.rx = 0;
+        self.ry = 0;
+        self.st = 0;
+
+        self.pc = join_hi_low(
+            self.bus.read_memory(POWER_RESET_IH),
+            self.bus.read_memory(POWER_RESET_IH + 1),
+        )
+    }
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
+        self.reset();
         self.bus.load_rom(cartridge.bytes)
     }
 

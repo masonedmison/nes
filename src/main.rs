@@ -9,6 +9,7 @@ mod cpu;
 mod utils;
 mod debug;
 mod cartridge;
+mod ppu;
 
 fn main() {
     let file_path = "./test_roms/cpu/nestest.nes";
