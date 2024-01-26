@@ -37,8 +37,7 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new() -> CPU {
-        let bus = Bus::new();
+    pub fn new(bus: Bus) -> CPU {
         // TODO setting this to match starting state of nestest.nes
         CPU {
             pc: 0xC000,
@@ -1045,7 +1044,6 @@ impl CPU {
 
         self.set_st_to(CARRY_FLAG - 1, msb(v));
         self.cond_set_neg(msb(result) == 1);
-        // TODO do we always set this or only in the case of the A addressing mode?
         self.cond_set_zero(result == 0);
         result
     }
@@ -1054,7 +1052,6 @@ impl CPU {
 
         self.set_st_to(CARRY_FLAG - 1, v & 0x01);
         self.cond_set_neg(msb(result) == 1);
-        // TODO do we always set this or only in the case of the A addressing mode?
         self.cond_set_zero(result == 0);
         result
     }

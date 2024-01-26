@@ -1,9 +1,10 @@
-use crate::cartridge::Cartridge;
+use crate::{bus::Bus, cartridge::Cartridge, ppu::PPU};
 
 use super::CPU;
 
 fn make_cpu_with_rom(seed_rom: &[u8], initial_pc: u16) -> CPU {
-    let mut cpu = CPU::new();
+    let bus = Bus::new(PPU::new());
+    let mut cpu = CPU::new(bus);
     cpu.pc = initial_pc;
 
     let mut buff = [0; 0x4000];
@@ -16,6 +17,10 @@ fn make_cpu_with_rom(seed_rom: &[u8], initial_pc: u16) -> CPU {
 
     cpu
 }
+fn make_cpu_with_empty_bus() -> CPU {
+    let bus = Bus::new(PPU::new());
+    CPU::new(bus)
+}
 
 fn execute_n_instructions(cpu: &mut CPU, n: u16) {
     (0..n).for_each(|_| {
@@ -26,7 +31,7 @@ fn execute_n_instructions(cpu: &mut CPU, n: u16) {
 
 #[test]
 fn test_set_st_to() {
-    let mut cpu = CPU::new();
+    let mut cpu = make_cpu_with_empty_bus();
     let b1 = 0b111;
     let b2 = 0b101;
     cpu.st = b1;
@@ -39,7 +44,7 @@ fn test_set_st_to() {
 
 #[test]
 fn test_bit() {
-    let mut cpu = CPU::new();
+    let mut cpu = make_cpu_with_empty_bus();
     cpu.st = 0;
 
     cpu.bit(0b11000000);
