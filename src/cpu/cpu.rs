@@ -61,11 +61,14 @@ impl CPU {
         )
     }
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
-        self.reset();
-        self.bus.load_rom(cartridge.bytes)
+        self.bus.load_rom(cartridge.prgrom);
+        self.reset()
     }
 
     pub fn run_debug(&mut self) {
+        // set registers and pc specifically for nestest
+        self.pc = 0xc000;
+        self.st = 0x24;
         loop {
             let opcode = self.bus.read_memory(self.pc);
             self.debug_exec(opcode)

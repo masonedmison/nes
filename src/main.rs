@@ -1,21 +1,22 @@
 use bus::Bus;
 use cartridge::Cartridge;
 use cpu::CPU;
-
+use ppu::PPU;
 
 extern crate sdl2;
 
 mod bus;
-mod cpu;
-mod utils;
-mod debug;
 mod cartridge;
+mod cpu;
+mod debug;
 mod ppu;
+mod utils;
 
 fn main() {
     let file_path = "./test_roms/cpu/nestest.nes";
     let cartridge = Cartridge::load(file_path).expect("Error loading file");
-    let bus: Bus = todo!();
+    let ppu = PPU::new();
+    let bus: Bus = Bus::new(ppu);
     let mut cpu = CPU::new(bus);
 
     cpu.load_cartridge(cartridge);

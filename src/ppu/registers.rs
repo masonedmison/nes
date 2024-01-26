@@ -16,12 +16,12 @@ bitflags! {
 }
 
 impl PPUCTRL {
-  pub fn new() -> Self {
-    PPUCTRL { bits: 0 }
-  }
-  pub fn update(&mut self, value: u8) {
-    self.bits = value
-  }
+    pub fn new() -> Self {
+        PPUCTRL { bits: 0 }
+    }
+    pub fn update(&mut self, value: u8) {
+        self.bits = value
+    }
 }
 
 bitflags! {
@@ -38,12 +38,12 @@ bitflags! {
   }
 }
 impl PPUMASK {
-  pub fn new() -> Self {
-    PPUMASK { bits: 0 }
-  }
-  pub fn update(&mut self, value: u8) {
-    self.bits = value
-  }
+    pub fn new() -> Self {
+        PPUMASK { bits: 0 }
+    }
+    pub fn update(&mut self, value: u8) {
+        self.bits = value
+    }
 }
 
 bitflags! {
@@ -55,9 +55,9 @@ bitflags! {
   }
 }
 impl PPUSTATUS {
-  pub fn new() -> Self {
-    PPUSTATUS { bits: 0 }
-  }
+    pub fn new() -> Self {
+        PPUSTATUS { bits: 0 }
+    }
 }
 
 // 0x2003
@@ -68,50 +68,56 @@ pub struct OAMDATA(pub u8);
 
 // 2005
 pub struct PPUSCROLL {
-  // (x scroll, y scroll)
-  value: (u8, u8),
+    // (x scroll, y scroll)
+    value: (u8, u8),
 }
 impl PPUSCROLL {
-  pub fn new () -> PPUSCROLL {
-    PPUSCROLL { value: (0, 0) }
-  }
-  pub fn update(&mut self, value: u8, w: bool) {
-    if w { self.value.1 = value}
-    else { self.value.0 = value }
-  }
+    pub fn new() -> PPUSCROLL {
+        PPUSCROLL { value: (0, 0) }
+    }
+    pub fn update(&mut self, value: u8, w: bool) {
+        if w {
+            self.value.1 = value
+        } else {
+            self.value.0 = value
+        }
+    }
 }
 
 // 2006
 pub struct PPUADDR {
-  // (msb, lsb)
-  value: (u8, u8),
+    // (msb, lsb)
+    value: (u8, u8),
 }
 impl PPUADDR {
-  pub fn new () -> PPUADDR {
-    // (hi, low)
-    PPUADDR { value: (0, 0) }
-  }
-  /**
-   * Get mirrors the underlying hi and lo bytes
-   * to 0x00..=0x3fff if the combined bytes exceeds 14 bits
-   */
-  pub fn get(&self) -> u16 {
-    let combined = (self.value.0 << 8) as u16 | (self.value.1) as u16;
-    combined & 0x3fff
-  }
-  fn set(&mut self, data: u16) {
-    let hi = data >> 8;
-    let lo = data & 0xff;
-    self.value = (hi as u8, lo as u8)
-  }
-  pub fn update(&mut self, data: u8, w: bool) {
-    if w { self.value.1 = data}
-    else { self.value.0 = data }
-  }
-  pub fn increment_by(&mut self, bit: bool) {
-    let incr_by = (if bit { 32 } else { 1 }) as u16;
-    self.set(self.get() + incr_by)
-  }
+    pub fn new() -> PPUADDR {
+        // (hi, low)
+        PPUADDR { value: (0, 0) }
+    }
+    /**
+     * Get mirrors the underlying hi and lo bytes
+     * to 0x00..=0x3fff if the combined bytes exceeds 14 bits
+     */
+    pub fn get(&self) -> u16 {
+        let combined = (self.value.0 as u16) << 8 | (self.value.1) as u16;
+        combined & 0x3fff
+    }
+    fn set(&mut self, data: u16) {
+        let hi = data >> 8;
+        let lo = data & 0xff;
+        self.value = (hi as u8, lo as u8)
+    }
+    pub fn update(&mut self, data: u8, w: bool) {
+        if w {
+            self.value.1 = data
+        } else {
+            self.value.0 = data
+        }
+    }
+    pub fn increment_by(&mut self, bit: bool) {
+        let incr_by = (if bit { 32 } else { 1 }) as u16;
+        self.set(self.get() + incr_by)
+    }
 }
 
 // 2007

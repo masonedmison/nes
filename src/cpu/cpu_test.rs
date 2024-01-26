@@ -1,4 +1,8 @@
-use crate::{bus::Bus, cartridge::Cartridge, ppu::PPU};
+use crate::{
+    bus::Bus,
+    cartridge::{Cartridge, Mirroring},
+    ppu::PPU,
+};
 
 use super::CPU;
 
@@ -13,7 +17,12 @@ fn make_cpu_with_rom(seed_rom: &[u8], initial_pc: u16) -> CPU {
         buff[idx] = *byte;
     });
 
-    cpu.load_cartridge(Cartridge { bytes: buff });
+    cpu.load_cartridge(Cartridge {
+        prgrom: buff.to_vec(),
+        chrrom: Vec::new(),
+        mirroring: Mirroring::Horizontal,
+        mapper: 0,
+    });
 
     cpu
 }
