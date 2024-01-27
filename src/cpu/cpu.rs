@@ -1,3 +1,5 @@
+use std::result;
+
 use crate::{
     bus::Bus,
     cartridge::Cartridge,
@@ -34,6 +36,7 @@ pub struct CPU {
     ry: u8,
     st: u8,
     bus: Bus,
+    cycles: u64,
 }
 
 impl CPU {
@@ -47,6 +50,7 @@ impl CPU {
             ry: 0,
             st: 0x24,
             bus,
+            cycles: 0,
         }
     }
 
@@ -56,8 +60,8 @@ impl CPU {
         self.st = 0;
 
         self.pc = join_hi_low(
-            self.bus.read_memory(POWER_RESET_IH),
-            self.bus.read_memory(POWER_RESET_IH + 1),
+            self.read_memory(POWER_RESET_IH),
+            self.read_memory(POWER_RESET_IH + 1),
         )
     }
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
@@ -66,12 +70,23 @@ impl CPU {
     }
 
     pub fn run_debug(&mut self) {
-        // set registers and pc specifically for nestest
         self.pc = 0xc000;
         self.st = 0x24;
+        self.cycles = 7;
+
+        let mut start_cycles;
+
         loop {
+            start_cycles = self.cycles;
+
             let opcode = self.bus.read_memory(self.pc);
-            self.debug_exec(opcode)
+            self.cycles += 1;
+
+            self.debug_exec(opcode);
+
+            if self.cycles - start_cycles == 1 {
+                self.cycles += 1
+            }
         }
     }
     fn debug_exec(&mut self, opcode: u8) {
@@ -83,12 +98,20 @@ impl CPU {
         state.y = self.ry;
         state.sp = self.sp;
         state.p = self.st;
+        state.cycles = self.cycles - 1;
 
         println!("{}", state.render());
 
         self.exec_opcode(opcode);
     }
-    // TODO consider timing? (e.g. how many cycles instruction each runs)
+    fn read_memory(&mut self, addr: u16) -> u8 {
+        self.cycles += 1;
+        self.bus.read_memory(addr)
+    }
+    fn write_memory(&mut self, addr: u16, data: u8) {
+        self.cycles += 1;
+        self.bus.write_memory(addr, data)
+    }
     fn exec_opcode(&mut self, opcode: u8) {
         match opcode {
             // ADC - Add with Carry
@@ -167,27 +190,32 @@ impl CPU {
             0x06 => {
                 let (v, addr) = self.zero_page();
                 let result = self.asl(v);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0x16 => {
                 let (v, addr) = self.zero_page_x();
                 let result = self.asl(v);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0x0E => {
                 let (v, addr) = self.absolute();
                 let result = self.asl(v);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0x1E => {
                 let (v, addr) = self.absolute_x();
                 let result = self.asl(v);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             // BCC - Branch if Carry Clear
             0x90 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(CARRY_FLAG - 1) == 0 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2;
@@ -195,8 +223,9 @@ impl CPU {
             // ********
             // BCS - Branch if Carry Set
             0xb0 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(CARRY_FLAG - 1) == 1 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2;
@@ -204,8 +233,9 @@ impl CPU {
             // ********
             // BEQ - Branch if Equal
             0xf0 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(ZERO_FLAG - 1) == 1 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2;
@@ -223,8 +253,9 @@ impl CPU {
             // ********
             // BMI - Branch if Minus
             0x30 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(NEGATIVE_FLAG - 1) == 1 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2
@@ -232,8 +263,9 @@ impl CPU {
             // ********
             // BNE - Branch if Not Equal
             0xd0 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(ZERO_FLAG - 1) == 0 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2
@@ -241,8 +273,9 @@ impl CPU {
             // ********
             // BPL - Branch if Positive
             0x10 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(NEGATIVE_FLAG - 1) == 0 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2
@@ -255,8 +288,9 @@ impl CPU {
             }
             // BVC - Branch if Overflow Clear
             0x50 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(OVERFLOW_FLAG - 1) == 0 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2
@@ -264,8 +298,9 @@ impl CPU {
             // ********
             // BVS - Branch if Overflow Set
             0x70 => {
-                let arg = self.bus.read_memory(self.pc + 1);
+                let arg = self.read_memory(self.pc + 1);
                 if self.get_st(OVERFLOW_FLAG - 1) == 1 {
+                    self.cycles += 1;
                     self.pc += arg as u16;
                 }
                 self.pc += 2
@@ -361,22 +396,26 @@ impl CPU {
             0xc6 => {
                 let (arg, addr) = self.zero_page();
                 let result = self.dec(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0xd6 => {
                 let (arg, addr) = self.zero_page_x();
                 let result = self.dec(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0xce => {
                 let (arg, addr) = self.absolute();
                 let result = self.dec(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0xde => {
                 let (arg, addr) = self.absolute_x();
                 let result = self.dec(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             // ********
             // DEX - Decrement X Register
@@ -435,22 +474,26 @@ impl CPU {
             0xe6 => {
                 let (arg, addr) = self.zero_page();
                 let result = self.inc(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0xf6 => {
                 let (arg, addr) = self.zero_page_x();
                 let result = self.inc(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0xee => {
                 let (arg, addr) = self.absolute();
                 let result = self.inc(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             0xfe => {
                 let (arg, addr) = self.absolute_x();
                 let result = self.inc(arg);
-                self.bus.write_memory(addr, result)
+                self.cycles += 1;
+                self.write_memory(addr, result)
             }
             // ********
             // INX - Increment X Register
@@ -473,8 +516,8 @@ impl CPU {
             // ********
             // JMP - Jump
             0x4c => {
-                let lo = self.bus.read_memory(self.pc + 1);
-                let hi = self.bus.read_memory(self.pc + 2);
+                let lo = self.read_memory(self.pc + 1);
+                let hi = self.read_memory(self.pc + 2);
                 let addr = join_hi_low(lo, hi);
                 self.pc = addr
             }
@@ -488,10 +531,10 @@ impl CPU {
                    some later chips like the 65SC02 so for compatibility always ensure the indirect
                     vector is not at the end of the page.
                 */
-                let lo_ind = self.bus.read_memory(self.pc + 1);
-                let hi_ind = self.bus.read_memory(self.pc + 2);
+                let lo_ind = self.read_memory(self.pc + 1);
+                let hi_ind = self.read_memory(self.pc + 2);
                 let page_addr = (hi_ind as u16) << 8;
-                let lo = self.bus.read_memory(page_addr | lo_ind as u16);
+                let lo = self.read_memory(page_addr | lo_ind as u16);
                 let hi = self
                     .bus
                     .read_memory(page_addr | (lo_ind.wrapping_add(1)) as u16);
@@ -504,8 +547,8 @@ impl CPU {
                 self.stack_push(hi_ret);
                 self.stack_push(lo_ret);
 
-                let lo = self.bus.read_memory(self.pc + 1);
-                let hi = self.bus.read_memory(self.pc + 2);
+                let lo = self.read_memory(self.pc + 1);
+                let hi = self.read_memory(self.pc + 2);
                 let addr = join_hi_low(lo, hi);
                 self.pc = addr
             }
@@ -596,22 +639,26 @@ impl CPU {
             0x46 => {
                 let (v, addr) = self.zero_page();
                 let result = self.lsr(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x56 => {
                 let (v, addr) = self.zero_page_x();
                 let result = self.lsr(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x4e => {
                 let (v, addr) = self.absolute();
                 let result = self.lsr(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x5e => {
                 let (v, addr) = self.absolute_x();
                 let result = self.lsr(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             // ********
             // NOP - No Operation
@@ -688,22 +735,26 @@ impl CPU {
             0x26 => {
                 let (v, addr) = self.zero_page();
                 let result = self.rol(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x36 => {
                 let (v, addr) = self.zero_page_x();
                 let result = self.rol(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x2e => {
                 let (v, addr) = self.absolute();
                 let result = self.rol(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x3e => {
                 let (v, addr) = self.absolute_x();
                 let result = self.rol(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             // ********
             // ROR - Rotate Right
@@ -714,22 +765,26 @@ impl CPU {
             0x66 => {
                 let (v, addr) = self.zero_page();
                 let result = self.ror(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x76 => {
                 let (v, addr) = self.zero_page_x();
                 let result = self.ror(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x6e => {
                 let (v, addr) = self.absolute();
                 let result = self.ror(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             0x7e => {
                 let (v, addr) = self.absolute_x();
                 let result = self.ror(v);
-                self.bus.write_memory(addr, result);
+                self.cycles += 1;
+                self.write_memory(addr, result);
             }
             // ********
             // RTI - Return from Interrupt
@@ -801,60 +856,60 @@ impl CPU {
             // ********
             // STA - Store Accumulator
             0x85 => {
-                let (_, addr) = self.zero_page();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.zero_page_no_result();
+                self.write_memory(addr, self.accum)
             }
             0x95 => {
-                let (_, addr) = self.zero_page_x();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.zero_page_x_no_result();
+                self.write_memory(addr, self.accum)
             }
             0x8d => {
-                let (_, addr) = self.absolute();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.absolute_no_result();
+                self.write_memory(addr, self.accum)
             }
             0x9d => {
-                let (_, addr) = self.absolute_x();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.absolute_x_no_result();
+                self.write_memory(addr, self.accum)
             }
             0x99 => {
-                let (_, addr) = self.absolute_y();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.absolute_y_no_result();
+                self.write_memory(addr, self.accum)
             }
             0x81 => {
-                let (_, addr) = self.indirect_x();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.indirect_x_no_result();
+                self.write_memory(addr, self.accum)
             }
             0x91 => {
-                let (_, addr) = self.indirect_y();
-                self.bus.write_memory(addr, self.accum)
+                let addr = self.indirect_y_no_result();
+                self.write_memory(addr, self.accum)
             }
             // ********
             // STX - Store X Register
             0x86 => {
-                let (_, addr) = self.zero_page();
-                self.bus.write_memory(addr, self.rx)
+                let addr = self.zero_page_no_result();
+                self.write_memory(addr, self.rx)
             }
             0x96 => {
-                let (_, addr) = self.zero_page_y();
-                self.bus.write_memory(addr, self.rx)
+                let addr = self.zero_page_y_no_result();
+                self.write_memory(addr, self.rx)
             }
             0x8e => {
-                let (_, addr) = self.absolute();
-                self.bus.write_memory(addr, self.rx)
+                let addr = self.absolute_no_result();
+                self.write_memory(addr, self.rx)
             }
             // ********
             // STY - Store Y Register
             0x84 => {
-                let (_, addr) = self.zero_page();
-                self.bus.write_memory(addr, self.ry)
+                let addr = self.zero_page_no_result();
+                self.write_memory(addr, self.ry)
             }
             0x94 => {
-                let (_, addr) = self.zero_page_x();
-                self.bus.write_memory(addr, self.ry)
+                let addr = self.zero_page_x_no_result();
+                self.write_memory(addr, self.ry)
             }
             0x8c => {
-                let (_, addr) = self.absolute();
-                self.bus.write_memory(addr, self.ry)
+                let addr = self.absolute_no_result();
+                self.write_memory(addr, self.ry)
             }
             // ********
             // TAX - Transfer Accumulator to X
@@ -966,8 +1021,8 @@ impl CPU {
         self.stack_push(p);
 
         // load IRQ interrupt vector
-        let low_addr = self.bus.read_memory(BRK_IH);
-        let hi_addr = self.bus.read_memory(BRK_IH + 1);
+        let low_addr = self.read_memory(BRK_IH);
+        let hi_addr = self.read_memory(BRK_IH + 1);
 
         let ih_addr = join_hi_low(low_addr, hi_addr);
         self.pc = ih_addr
@@ -1068,73 +1123,121 @@ impl CPU {
 
     // functions to get the underlying data value for the given adressing mode
     fn immediate(&mut self) -> u8 {
-        let result = self.bus.read_memory(self.pc + 1);
+        let result = self.read_memory(self.pc + 1);
         self.pc += 2;
         result
     }
     fn zero_page(&mut self) -> (u8, u16) {
-        let addr = self.bus.read_memory(self.pc + 1) as u16;
-        let result = self.bus.read_memory(addr);
+        let indexed_addr = self.zero_page_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn zero_page_no_result(&mut self) -> u16 {
+        let addr = self.read_memory(self.pc + 1) as u16;
         self.pc += 2;
-        (result, addr)
+        addr
     }
     fn zero_page_x(&mut self) -> (u8, u16) {
-        let arg = self.bus.read_memory(self.pc + 1);
+        let indexed_addr = self.zero_page_x_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn zero_page_x_no_result(&mut self) -> u16 {
+        let arg = self.read_memory(self.pc + 1);
         let addr = arg.wrapping_add(self.rx);
-        let result = self.bus.read_memory(addr as u16);
         self.pc += 2;
-        (result, addr as u16)
+        addr as u16
     }
     fn zero_page_y(&mut self) -> (u8, u16) {
-        let arg = self.bus.read_memory(self.pc + 1);
+        let indexed_addr = self.zero_page_y_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn zero_page_y_no_result(&mut self) -> u16 {
+        let arg = self.read_memory(self.pc + 1);
         let addr = arg.wrapping_add(self.ry);
-        let result = self.bus.read_memory(addr as u16);
         self.pc += 2;
-        (result, addr as u16)
+        addr as u16
     }
     fn absolute(&mut self) -> (u8, u16) {
-        let lo = self.bus.read_memory(self.pc + 1);
-        let hi = self.bus.read_memory(self.pc + 2);
+        let indexed_addr = self.absolute_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn absolute_no_result(&mut self) -> u16 {
+        let lo = self.read_memory(self.pc + 1);
+        let hi = self.read_memory(self.pc + 2);
         let addr = join_hi_low(lo, hi);
-        let result = self.bus.read_memory(addr);
         self.pc += 3;
-        (result, addr)
+        addr
+    }
+    fn page_boundary_crossed(base: u16, indexed: u16) -> bool {
+        (base & 0xff00) != (indexed & 0xff00)
     }
     fn absolute_x(&mut self) -> (u8, u16) {
-        let lo = self.bus.read_memory(self.pc + 1);
-        let hi = self.bus.read_memory(self.pc + 2);
-        let addr = join_hi_low(lo, hi).wrapping_add(self.rx as u16);
-        let result = self.bus.read_memory(addr);
+        let indexed_addr = self.absolute_x_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn absolute_x_no_result(&mut self) -> u16 {
+        let lo = self.read_memory(self.pc + 1);
+        let hi = self.read_memory(self.pc + 2);
+        let base_addr = join_hi_low(lo, hi);
+        let indexed_addr = base_addr.wrapping_add(self.rx as u16);
+        if CPU::page_boundary_crossed(base_addr, indexed_addr) {
+            self.cycles += 1
+        }
+
         self.pc += 3;
-        (result, addr)
+        indexed_addr
     }
     fn absolute_y(&mut self) -> (u8, u16) {
-        let lo = self.bus.read_memory(self.pc + 1);
-        let hi = self.bus.read_memory(self.pc + 2);
-        let addr = join_hi_low(lo, hi).wrapping_add(self.ry as u16);
-        let result = self.bus.read_memory(addr);
+        let indexed_addr = self.absolute_y_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn absolute_y_no_result(&mut self) -> u16 {
+        let lo = self.read_memory(self.pc + 1);
+        let hi = self.read_memory(self.pc + 2);
+        let base_addr = join_hi_low(lo, hi);
+        let indexed_addr = base_addr.wrapping_add(self.ry as u16);
+        if CPU::page_boundary_crossed(base_addr, indexed_addr) {
+            self.cycles += 1
+        }
         self.pc += 3;
-        (result, addr)
+        indexed_addr
     }
     fn indirect_x(&mut self) -> (u8, u16) {
-        let arg = self.bus.read_memory(self.pc + 1);
-        let lo = self.bus.read_memory(arg.wrapping_add(self.rx) as u16);
+        let addr = self.indirect_x_no_result();
+        let result = self.read_memory(addr);
+        (result, addr)
+    }
+    fn indirect_x_no_result(&mut self) -> u16 {
+        let arg = self.read_memory(self.pc + 1);
+        let lo = self.read_memory(arg.wrapping_add(self.rx) as u16);
         let hi = self
             .bus
             .read_memory(arg.wrapping_add(self.rx.wrapping_add(1)) as u16);
         let addr = join_hi_low(lo, hi);
-        let result = self.bus.read_memory(addr);
         self.pc += 2;
-        (result, addr)
+        addr
     }
     fn indirect_y(&mut self) -> (u8, u16) {
-        let arg = self.bus.read_memory(self.pc + 1);
-        let lo = self.bus.read_memory(arg as u16);
-        let hi = self.bus.read_memory(arg.wrapping_add(1) as u16);
-        let addr = join_hi_low(lo, hi).wrapping_add(self.ry as u16);
-        let result = self.bus.read_memory(addr);
+        let indexed_addr = self.indirect_y_no_result();
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
+    }
+    fn indirect_y_no_result(&mut self) -> u16 {
+        let arg = self.read_memory(self.pc + 1);
+        let lo = self.read_memory(arg as u16);
+        let hi = self.read_memory(arg.wrapping_add(1) as u16);
+        let base_addr = join_hi_low(lo, hi);
+        let indexed_addr = base_addr.wrapping_add(self.ry as u16);
+        if CPU::page_boundary_crossed(base_addr, indexed_addr) {
+            self.cycles += 1
+        }
         self.pc += 2;
-        (result, addr)
+        indexed_addr
     }
     // ********
 
@@ -1228,13 +1331,15 @@ impl CPU {
     */
     fn stack_push(&mut self, byte: u8) {
         let addr = 0x100 + self.sp as u16;
-        self.bus.write_memory(addr, byte);
+        self.write_memory(addr, byte);
         self.sp = self.sp.wrapping_sub(1);
+        self.cycles += 1
     }
     fn stack_pop(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let addr = 0x100 + self.sp as u16;
-        let result = self.bus.read_memory(addr);
+        let result = self.read_memory(addr);
+        self.cycles += 2;
         result
     }
     // ********

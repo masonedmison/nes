@@ -10,7 +10,7 @@ pub struct CpuState {
   pub y: u8,
   pub p: u8,
   pub sp: u8,
-  pub cycles: u32
+  pub cycles: u64
 }
 
 impl CpuState {
@@ -21,14 +21,15 @@ impl CpuState {
     p &= !(1 << 4);
 
     format!(
-      "Address={:#x}\tOpcode={:#x}\tA:{:#x}\tX:{:#x}\tY:{:#x}\tP:{:#x}\tSP:{:#x}",
+      "Address={:#x}\tOpcode={:#x}\tA:{:#x}\tX:{:#x}\tY:{:#x}\tP:{:#x}\tSP:{:#x}\tCycles:{}",
       self.addr,
       self.opcode,
       self.a,
       self.x,
       self.y,
       p,
-      self.sp
+      self.sp,
+      self.cycles
     )
   }
 }
