@@ -20,5 +20,5 @@ fn main() {
     let mut cpu = CPU::new(bus);
 
     cpu.load_cartridge(cartridge);
-    cpu.run_debug()
+    todo!()
 }

@@ -37,6 +37,8 @@ pub struct CPU {
     st: u8,
     bus: Bus,
     cycles: u64,
+    stack_push_count: u8,
+    stack_pop_count: u8,
 }
 
 impl CPU {
@@ -51,6 +53,8 @@ impl CPU {
             st: 0x24,
             bus,
             cycles: 0,
+            stack_push_count: 0,
+            stack_pop_count: 0,
         }
     }
 
@@ -64,12 +68,15 @@ impl CPU {
             self.read_memory(POWER_RESET_IH + 1),
         )
     }
+    fn incr_stack_pop_count(&mut self) {
+        self.stack_pop_count += if self.stack_pop_count == 0 { 2 } else { 1 }
+    }
     pub fn load_cartridge(&mut self, cartridge: Cartridge) {
         self.bus.load_rom(cartridge.prgrom);
         self.reset()
     }
 
-    pub fn run_debug(&mut self) {
+    fn run_debug(&mut self) {
         self.pc = 0xc000;
         self.st = 0x24;
         self.cycles = 7;
@@ -78,18 +85,23 @@ impl CPU {
 
         loop {
             start_cycles = self.cycles;
-
+            self.stack_pop_count = 0;
+            self.stack_push_count = 0;
             let opcode = self.bus.read_memory(self.pc);
             self.cycles += 1;
 
             self.debug_exec(opcode);
 
+            // Make sure to check cycle diff count _before_ applying
+            // any cycles due to accessing the stack
             if self.cycles - start_cycles == 1 {
                 self.cycles += 1
             }
+            // TODO don't love this...
+            self.cycles += (self.stack_pop_count + self.stack_push_count) as u64
         }
     }
-    fn debug_exec(&mut self, opcode: u8) {
+    fn debug_exec(&mut self, opcode: u8) -> CpuState {
         let mut state = CpuState::default();
         state.opcode = opcode;
         state.addr = self.pc;
@@ -97,12 +109,12 @@ impl CPU {
         state.x = self.rx;
         state.y = self.ry;
         state.sp = self.sp;
-        state.p = self.st;
+        state.set_status(self.st);
         state.cycles = self.cycles - 1;
 
-        println!("{}", state.render());
-
         self.exec_opcode(opcode);
+
+        state
     }
     fn read_memory(&mut self, addr: u16) -> u8 {
         self.cycles += 1;
@@ -132,11 +144,11 @@ impl CPU {
                 self.adc(absolute.0)
             }
             0x7d => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.adc(absolute_x.0)
             }
             0x79 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.adc(v)
             }
             0x61 => {
@@ -144,7 +156,7 @@ impl CPU {
                 self.adc(v)
             }
             0x71 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.adc(v)
             }
             // ********
@@ -166,11 +178,11 @@ impl CPU {
                 self.and(absolute.0)
             }
             0x3d => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.and(absolute_x.0)
             }
             0x39 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.and(v)
             }
             0x21 => {
@@ -178,7 +190,7 @@ impl CPU {
                 self.and(v)
             }
             0x31 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.and(v)
             }
             // ********
@@ -206,7 +218,7 @@ impl CPU {
                 self.write_memory(addr, result)
             }
             0x1E => {
-                let (v, addr) = self.absolute_x();
+                let (v, addr) = self.absolute_x(Op::RMW);
                 let result = self.asl(v);
                 self.cycles += 1;
                 self.write_memory(addr, result)
@@ -284,6 +296,7 @@ impl CPU {
             // BRK - Force Interrupt
             0x00 => {
                 self.brk();
+                self.cycles += 1;
                 self.pc += 1
             }
             // BVC - Branch if Overflow Clear
@@ -348,11 +361,11 @@ impl CPU {
                 self.cmp(absolute.0)
             }
             0xdd => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.cmp(absolute_x.0)
             }
             0xd9 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.cmp(v)
             }
             0xc1 => {
@@ -360,7 +373,7 @@ impl CPU {
                 self.cmp(v)
             }
             0xd1 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.cmp(v)
             }
             // ********
@@ -412,7 +425,7 @@ impl CPU {
                 self.write_memory(addr, result)
             }
             0xde => {
-                let (arg, addr) = self.absolute_x();
+                let (arg, addr) = self.absolute_x(Op::RMW);
                 let result = self.dec(arg);
                 self.cycles += 1;
                 self.write_memory(addr, result)
@@ -454,11 +467,11 @@ impl CPU {
                 self.eor(absolute.0)
             }
             0x5d => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.eor(absolute_x.0)
             }
             0x59 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.eor(v)
             }
             0x41 => {
@@ -466,7 +479,7 @@ impl CPU {
                 self.eor(v)
             }
             0x51 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.eor(v)
             }
             // ********
@@ -490,7 +503,7 @@ impl CPU {
                 self.write_memory(addr, result)
             }
             0xfe => {
-                let (arg, addr) = self.absolute_x();
+                let (arg, addr) = self.absolute_x(Op::RMW);
                 let result = self.inc(arg);
                 self.cycles += 1;
                 self.write_memory(addr, result)
@@ -535,14 +548,13 @@ impl CPU {
                 let hi_ind = self.read_memory(self.pc + 2);
                 let page_addr = (hi_ind as u16) << 8;
                 let lo = self.read_memory(page_addr | lo_ind as u16);
-                let hi = self
-                    .bus
-                    .read_memory(page_addr | (lo_ind.wrapping_add(1)) as u16);
+                let hi = self.read_memory(page_addr | (lo_ind.wrapping_add(1)) as u16);
                 self.pc = join_hi_low(lo, hi)
             }
             // ********
             // JSR - Jump to Subroutine
             0x20 => {
+                self.cycles += 1;
                 let (lo_ret, hi_ret) = as_lo_hi(self.pc + 2);
                 self.stack_push(hi_ret);
                 self.stack_push(lo_ret);
@@ -571,11 +583,11 @@ impl CPU {
                 self.lda(absolute.0)
             }
             0xbd => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.lda(absolute_x.0)
             }
             0xb9 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.lda(v)
             }
             0xa1 => {
@@ -583,7 +595,7 @@ impl CPU {
                 self.lda(v)
             }
             0xb1 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.lda(v)
             }
             // ********
@@ -605,7 +617,7 @@ impl CPU {
                 self.ldx(absolute.0)
             }
             0xbe => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.ldx(v)
             }
             // ********
@@ -627,7 +639,7 @@ impl CPU {
                 self.ldy(absolute.0)
             }
             0xbc => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.ldy(absolute_x.0)
             }
             // ********
@@ -655,7 +667,7 @@ impl CPU {
                 self.write_memory(addr, result);
             }
             0x5e => {
-                let (v, addr) = self.absolute_x();
+                let (v, addr) = self.absolute_x(Op::RMW);
                 let result = self.lsr(v);
                 self.cycles += 1;
                 self.write_memory(addr, result);
@@ -682,11 +694,11 @@ impl CPU {
                 self.ora(absolute.0)
             }
             0x1d => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.ora(absolute_x.0)
             }
             0x19 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.ora(v)
             }
             0x01 => {
@@ -694,25 +706,28 @@ impl CPU {
                 self.ora(v)
             }
             0x11 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.ora(v)
             }
             // ********
             // PHA - Push Accumulator
             0x48 => {
+                self.cycles += 1;
                 self.stack_push(self.accum);
                 self.pc += 1
             }
             // ********
             // PHP - Push Processor Status
             0x08 => {
-                self.clear_brk();
+                self.cycles += 1;
+                self.set_brk();
                 self.stack_push(self.st);
                 self.pc += 1
             }
             // ********
             // PLA - Pull Accumulator
             0x68 => {
+                self.cycles += 1;
                 let next_accum = self.stack_pop();
                 self.cond_set_zero(next_accum == 0);
                 self.cond_set_neg(msb(next_accum) == 1);
@@ -722,6 +737,7 @@ impl CPU {
             // ********
             // PLP - Pull Processor Status
             0x28 => {
+                self.cycles += 1;
                 let next_st = self.stack_pop();
                 self.st = next_st;
                 self.pc += 1
@@ -751,7 +767,7 @@ impl CPU {
                 self.write_memory(addr, result);
             }
             0x3e => {
-                let (v, addr) = self.absolute_x();
+                let (v, addr) = self.absolute_x(Op::RMW);
                 let result = self.rol(v);
                 self.cycles += 1;
                 self.write_memory(addr, result);
@@ -781,7 +797,7 @@ impl CPU {
                 self.write_memory(addr, result);
             }
             0x7e => {
-                let (v, addr) = self.absolute_x();
+                let (v, addr) = self.absolute_x(Op::RMW);
                 let result = self.ror(v);
                 self.cycles += 1;
                 self.write_memory(addr, result);
@@ -789,6 +805,7 @@ impl CPU {
             // ********
             // RTI - Return from Interrupt
             0x40 => {
+                self.cycles += 1;
                 self.st = self.stack_pop();
                 let lo = self.stack_pop();
                 let hi = self.stack_pop();
@@ -797,9 +814,13 @@ impl CPU {
             // ********
             // RTS - Return from Subroutine
             0x60 => {
+                // +1 for throwing away next instruction byte
+                self.cycles += 1;
                 let lo = self.stack_pop();
                 let hi = self.stack_pop();
-                self.pc = join_hi_low(lo, hi).wrapping_add(1)
+                self.pc = join_hi_low(lo, hi).wrapping_add(1);
+                // +1 for incrementing PC
+                self.cycles += 1
             }
             // ********
             // SBC - Subtract with Carry
@@ -820,11 +841,11 @@ impl CPU {
                 self.sbc(absolute.0)
             }
             0xfd => {
-                let absolute_x = self.absolute_x();
+                let absolute_x = self.absolute_x(Op::Read);
                 self.sbc(absolute_x.0)
             }
             0xf9 => {
-                let (v, _) = self.absolute_y();
+                let (v, _) = self.absolute_y(Op::Read);
                 self.sbc(v)
             }
             0xe1 => {
@@ -832,7 +853,7 @@ impl CPU {
                 self.sbc(v)
             }
             0xf1 => {
-                let (v, _) = self.indirect_y();
+                let (v, _) = self.indirect_y(Op::Read);
                 self.sbc(v)
             }
             // ********
@@ -868,11 +889,11 @@ impl CPU {
                 self.write_memory(addr, self.accum)
             }
             0x9d => {
-                let addr = self.absolute_x_no_result();
+                let (_, addr) = self.absolute_x(Op::Write);
                 self.write_memory(addr, self.accum)
             }
             0x99 => {
-                let addr = self.absolute_y_no_result();
+                let (_, addr) = self.absolute_y(Op::Write);
                 self.write_memory(addr, self.accum)
             }
             0x81 => {
@@ -880,7 +901,7 @@ impl CPU {
                 self.write_memory(addr, self.accum)
             }
             0x91 => {
-                let addr = self.indirect_y_no_result();
+                let (_, addr) = self.indirect_y(Op::Write);
                 self.write_memory(addr, self.accum)
             }
             // ********
@@ -1010,6 +1031,8 @@ impl CPU {
     fn brk(&mut self) {
         let low_pc = (self.pc & 0xff) as u8;
         let hi_pc = ((self.pc >> 8) & 0xff) as u8;
+
+        self.set_brk();
 
         // push current pc and status flag to stack (in that orer)
         self.stack_push(hi_pc);
@@ -1144,6 +1167,7 @@ impl CPU {
     }
     fn zero_page_x_no_result(&mut self) -> u16 {
         let arg = self.read_memory(self.pc + 1);
+        self.cycles += 1;
         let addr = arg.wrapping_add(self.rx);
         self.pc += 2;
         addr as u16
@@ -1155,6 +1179,7 @@ impl CPU {
     }
     fn zero_page_y_no_result(&mut self) -> u16 {
         let arg = self.read_memory(self.pc + 1);
+        self.cycles += 1;
         let addr = arg.wrapping_add(self.ry);
         self.pc += 2;
         addr as u16
@@ -1167,45 +1192,41 @@ impl CPU {
     fn absolute_no_result(&mut self) -> u16 {
         let lo = self.read_memory(self.pc + 1);
         let hi = self.read_memory(self.pc + 2);
-        let addr = join_hi_low(lo, hi);
+        let indexed_addr = join_hi_low(lo, hi);
         self.pc += 3;
-        addr
+        indexed_addr as u16
     }
     fn page_boundary_crossed(base: u16, indexed: u16) -> bool {
         (base & 0xff00) != (indexed & 0xff00)
     }
-    fn absolute_x(&mut self) -> (u8, u16) {
-        let indexed_addr = self.absolute_x_no_result();
-        let result = self.read_memory(indexed_addr);
-        (result, indexed_addr)
-    }
-    fn absolute_x_no_result(&mut self) -> u16 {
+    fn absolute_x(&mut self, op: Op) -> (u8, u16) {
         let lo = self.read_memory(self.pc + 1);
         let hi = self.read_memory(self.pc + 2);
         let base_addr = join_hi_low(lo, hi);
         let indexed_addr = base_addr.wrapping_add(self.rx as u16);
-        if CPU::page_boundary_crossed(base_addr, indexed_addr) {
+        if op == Op::Read && CPU::page_boundary_crossed(base_addr, indexed_addr) {
+            self.cycles += 1
+        }
+
+        if op == Op::RMW {
             self.cycles += 1
         }
 
         self.pc += 3;
-        indexed_addr
-    }
-    fn absolute_y(&mut self) -> (u8, u16) {
-        let indexed_addr = self.absolute_y_no_result();
         let result = self.read_memory(indexed_addr);
         (result, indexed_addr)
     }
-    fn absolute_y_no_result(&mut self) -> u16 {
+    fn absolute_y(&mut self, op: Op) -> (u8, u16) {
         let lo = self.read_memory(self.pc + 1);
         let hi = self.read_memory(self.pc + 2);
         let base_addr = join_hi_low(lo, hi);
         let indexed_addr = base_addr.wrapping_add(self.ry as u16);
-        if CPU::page_boundary_crossed(base_addr, indexed_addr) {
+        if op == Op::Read && CPU::page_boundary_crossed(base_addr, indexed_addr) {
             self.cycles += 1
         }
         self.pc += 3;
-        indexed_addr
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
     }
     fn indirect_x(&mut self) -> (u8, u16) {
         let addr = self.indirect_x_no_result();
@@ -1214,30 +1235,25 @@ impl CPU {
     }
     fn indirect_x_no_result(&mut self) -> u16 {
         let arg = self.read_memory(self.pc + 1);
+        self.cycles += 1;
         let lo = self.read_memory(arg.wrapping_add(self.rx) as u16);
-        let hi = self
-            .bus
-            .read_memory(arg.wrapping_add(self.rx.wrapping_add(1)) as u16);
+        let hi = self.read_memory(arg.wrapping_add(self.rx.wrapping_add(1)) as u16);
         let addr = join_hi_low(lo, hi);
         self.pc += 2;
         addr
     }
-    fn indirect_y(&mut self) -> (u8, u16) {
-        let indexed_addr = self.indirect_y_no_result();
-        let result = self.read_memory(indexed_addr);
-        (result, indexed_addr)
-    }
-    fn indirect_y_no_result(&mut self) -> u16 {
+    fn indirect_y(&mut self, op: Op) -> (u8, u16) {
         let arg = self.read_memory(self.pc + 1);
         let lo = self.read_memory(arg as u16);
         let hi = self.read_memory(arg.wrapping_add(1) as u16);
         let base_addr = join_hi_low(lo, hi);
         let indexed_addr = base_addr.wrapping_add(self.ry as u16);
-        if CPU::page_boundary_crossed(base_addr, indexed_addr) {
+        if op == Op::Read && CPU::page_boundary_crossed(base_addr, indexed_addr) {
             self.cycles += 1
         }
         self.pc += 2;
-        indexed_addr
+        let result = self.read_memory(indexed_addr);
+        (result, indexed_addr)
     }
     // ********
 
@@ -1285,6 +1301,9 @@ impl CPU {
         self.clear_st(NEGATIVE_FLAG - 1)
     }
 
+    fn set_brk(&mut self) {
+        self.set_st(BRK_CMD - 1)
+    }
     fn clear_brk(&mut self) {
         self.clear_st(BRK_CMD - 1)
     }
@@ -1331,18 +1350,25 @@ impl CPU {
     */
     fn stack_push(&mut self, byte: u8) {
         let addr = 0x100 + self.sp as u16;
-        self.write_memory(addr, byte);
+        self.bus.write_memory(addr, byte);
         self.sp = self.sp.wrapping_sub(1);
-        self.cycles += 1
+        self.stack_push_count += 1;
     }
     fn stack_pop(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let addr = 0x100 + self.sp as u16;
-        let result = self.read_memory(addr);
-        self.cycles += 2;
+        let result = self.bus.read_memory(addr);
+        self.incr_stack_pop_count();
         result
     }
     // ********
+}
+
+#[derive(PartialEq)]
+enum Op {
+    Read,
+    Write,
+    RMW,
 }
 
 #[cfg(test)]

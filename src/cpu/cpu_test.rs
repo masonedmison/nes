@@ -1,97 +1,106 @@
+use regex::Regex;
+use std::{default, fs};
+
 use crate::{
     bus::Bus,
     cartridge::{Cartridge, Mirroring},
+    debug::CpuState,
     ppu::PPU,
 };
 
 use super::CPU;
 
-fn make_cpu_with_rom(seed_rom: &[u8], initial_pc: u16) -> CPU {
-    let bus = Bus::new(PPU::new());
-    let mut cpu = CPU::new(bus);
-    cpu.pc = initial_pc;
-
-    let mut buff = [0; 0x4000];
-
-    seed_rom.iter().enumerate().for_each(|(idx, byte)| {
-        buff[idx] = *byte;
-    });
-
-    cpu.load_cartridge(Cartridge {
-        prgrom: buff.to_vec(),
-        chrrom: Vec::new(),
-        mirroring: Mirroring::Horizontal,
-        mapper: 0,
-    });
-
-    cpu
-}
 fn make_cpu_with_empty_bus() -> CPU {
     let bus = Bus::new(PPU::new());
     CPU::new(bus)
 }
 
-fn execute_n_instructions(cpu: &mut CPU, n: u16) {
-    (0..n).for_each(|_| {
+// run and compare nestest.nes against nestest.log
+fn run_debug_until(cpu: &mut CPU, n: u32) -> Vec<CpuState> {
+    cpu.pc = 0xc000;
+    cpu.st = 0x24;
+    cpu.cycles = 7;
+
+    let mut states: Vec<CpuState> = vec![];
+    let mut start_cycles;
+    let mut state: CpuState;
+    let mut i = 0;
+    while i < n {
+        start_cycles = cpu.cycles;
+        cpu.stack_pop_count = 0;
+        cpu.stack_push_count = 0;
+
         let opcode = cpu.bus.read_memory(cpu.pc);
-        cpu.exec_opcode(opcode)
-    })
-}
+        cpu.cycles += 1;
 
+        state = cpu.debug_exec(opcode);
+        states.push(state);
+
+        // Make sure to check cycle diff count _before_ applying
+        // any cycles due to accessing the stack
+        if cpu.cycles - start_cycles == 1 {
+            cpu.cycles += 1
+        }
+        // TODO don't love this...
+        cpu.cycles += (cpu.stack_pop_count + cpu.stack_push_count) as u64;
+
+        i += 1
+    }
+    states
+}
+fn parse_nestest_log() -> Vec<CpuState> {
+    /*
+    Groups:
+    1: Address, 2: opcode (as hex), 3: accum, 4: rx, 5: ry, 6: st, 7: sp, 8: cycle count
+    */
+    let re =
+        Regex::new(r"(\w{4})\s+(\w{2}).*A:(\w+)\sX:(\w+)\sY:(\w+)\sP:(\w+)\sSP:(\w+).*CYC:(\w+)")
+            .unwrap();
+    let neslog = fs::read_to_string("./test_roms/logs/nestest.log").unwrap();
+    let mut states: Vec<CpuState> = vec![];
+    for (idx, line) in neslog.split("\n").enumerate() {
+        if line.is_empty() {
+            continue;
+        }
+
+        let caps = re.captures(line).expect(&format!(
+            "Expected match but failed at line: {}\nEntry: {}",
+            idx, line
+        ));
+        let state = CpuState {
+            addr: u16::from_str_radix(&caps[1], 16).unwrap(),
+            opcode: u8::from_str_radix(&caps[2], 16).unwrap(),
+            a: u8::from_str_radix(&caps[3], 16).unwrap(),
+            x: u8::from_str_radix(&caps[4], 16).unwrap(),
+            y: u8::from_str_radix(&caps[5], 16).unwrap(),
+            p: u8::from_str_radix(&caps[6], 16).unwrap(),
+            sp: u8::from_str_radix(&caps[7], 16).unwrap(),
+            cycles: *&caps[8].parse().unwrap(),
+        };
+        states.push(state)
+    }
+    states
+}
 #[test]
-fn test_set_st_to() {
+fn nestest() {
+    let file_path = "./test_roms/cpu/nestest.nes";
+    let cartridge = Cartridge::load(file_path).expect("Error loading file");
     let mut cpu = make_cpu_with_empty_bus();
-    let b1 = 0b111;
-    let b2 = 0b101;
-    cpu.st = b1;
-    cpu.set_st_to(1, 0);
-    assert_eq!(cpu.st, 0b101);
-    cpu.st = b2;
-    cpu.set_st_to(1, 1);
-    assert_eq!(cpu.st, 0b111);
-}
+    cpu.load_cartridge(cartridge);
 
-#[test]
-fn test_bit() {
-    let mut cpu = make_cpu_with_empty_bus();
-    cpu.st = 0;
+    let actual = run_debug_until(&mut cpu, 5003);
+    let expected = parse_nestest_log();
 
-    cpu.bit(0b11000000);
-
-    let actual = cpu.st;
-    println!("{actual:b}");
-
-    assert_eq!(0b11000010, cpu.st)
-}
-
-#[test]
-fn test_lda_sta_bit_test() {
-    let rom = vec![
-        0xa9, /* LDA #$00 */
-        0x00, 0x85, /* STA $01 */
-        0x01, 0x24, /* BIT $01 */
-        0x01,
-    ];
-    let mut cpu = make_cpu_with_rom(&rom, 0xc000);
-    cpu.accum = 0xff;
-    cpu.st = 0xe4;
-    cpu.sp = 0xfb;
-
-    execute_n_instructions(&mut cpu, 3);
-    println!("Expected st {:#x}, actual st: {:#x}", 0x26, cpu.st);
-    assert_eq!(cpu.st, 0x26);
-    assert_eq!(cpu.pc, 0xc006)
-}
-
-#[test]
-fn test_adc() {
-    let rom = vec![0x69 /* ADC #$69 */, 0x69];
-
-    let mut cpu = make_cpu_with_rom(&rom, 0xc000);
-    cpu.st = 0x6e;
-
-    execute_n_instructions(&mut cpu, 1);
-
-    println!("Expected st {:#x}, actual st: {:#x}", 0x2c, cpu.st);
-    assert_eq!(cpu.st, 0x2c)
+    let mut prev: (CpuState, CpuState) = (CpuState::default(), CpuState::default());
+    for (idx, (a, e)) in actual.into_iter().zip(expected).enumerate() {
+        assert_eq!(
+            a,
+            e,
+            "Discrepancy found at index {}\nA: {}\nE: {}",
+            idx,
+            prev.0.render(),
+            prev.1.render()
+        );
+        prev = (a, e);
+    }
 }
