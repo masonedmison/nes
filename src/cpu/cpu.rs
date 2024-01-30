@@ -43,14 +43,13 @@ pub struct CPU {
 
 impl CPU {
     pub fn new(bus: Bus) -> CPU {
-        // TODO setting this to match starting state of nestest.nes
         CPU {
-            pc: 0xC000,
+            pc: 0x0,
             sp: 0xfd,
             accum: 0,
             rx: 0,
             ry: 0,
-            st: 0x24,
+            st: 0x0,
             bus,
             cycles: 0,
             stack_push_count: 0,
@@ -68,6 +67,30 @@ impl CPU {
             self.read_memory(POWER_RESET_IH + 1),
         )
     }
+    fn nmi(&mut self) {
+        let low_pc = (self.pc & 0xff) as u8;
+        let hi_pc = ((self.pc >> 8) & 0xff) as u8;
+
+        // nmi takes 7 cycles but only the explicit `read_memory`
+        // will increment the cycle count (which there are two) so we add 5 here.
+        self.cycles += 5;
+
+        // push current pc and status flag to stack (in that orer)
+        self.stack_push(hi_pc);
+        self.stack_push(low_pc);
+
+        self.stack_push(self.st);
+
+        self.bus.clear_generate_nmi();
+        self.set_interrupt_disable();
+
+        // load NMI interrupt vector
+        let low_addr = self.read_memory(NON_MASKABLE_IH);
+        let hi_addr = self.read_memory(NON_MASKABLE_IH + 1);
+
+        let ih_addr = join_hi_low(low_addr, hi_addr);
+        self.pc = ih_addr
+    }
     fn incr_stack_pop_count(&mut self) {
         self.stack_pop_count += if self.stack_pop_count == 0 { 2 } else { 1 }
     }
@@ -76,21 +99,24 @@ impl CPU {
         self.reset()
     }
 
-    fn run_debug(&mut self) {
-        self.pc = 0xc000;
-        self.st = 0x24;
-        self.cycles = 7;
-
-        let mut start_cycles;
-
+    // TODO assuming that we run one instruction
+    // and then yield to the ppu
+    // we can certainly do better than this.
+    fn run(&mut self) {
+        let mut start_cycles: u64;
         loop {
+            if self.bus.poll_generate_nmi() {
+                self.nmi()
+            }
+
             start_cycles = self.cycles;
             self.stack_pop_count = 0;
             self.stack_push_count = 0;
+
             let opcode = self.bus.read_memory(self.pc);
             self.cycles += 1;
 
-            self.debug_exec(opcode);
+            self.exec_opcode(opcode);
 
             // Make sure to check cycle diff count _before_ applying
             // any cycles due to accessing the stack
@@ -98,8 +124,19 @@ impl CPU {
                 self.cycles += 1
             }
             // TODO don't love this...
-            self.cycles += (self.stack_pop_count + self.stack_push_count) as u64
+            self.cycles += (self.stack_pop_count + self.stack_push_count) as u64;
+
+            let cycles_run = self.cycles - start_cycles;
+            self.bus.tick(cycles_run)
         }
+    }
+    fn read_memory(&mut self, addr: u16) -> u8 {
+        self.cycles += 1;
+        self.bus.read_memory(addr)
+    }
+    fn write_memory(&mut self, addr: u16, data: u8) {
+        self.cycles += 1;
+        self.bus.write_memory(addr, data)
     }
     fn debug_exec(&mut self, opcode: u8) -> CpuState {
         let mut state = CpuState::default();
@@ -115,14 +152,6 @@ impl CPU {
         self.exec_opcode(opcode);
 
         state
-    }
-    fn read_memory(&mut self, addr: u16) -> u8 {
-        self.cycles += 1;
-        self.bus.read_memory(addr)
-    }
-    fn write_memory(&mut self, addr: u16, data: u8) {
-        self.cycles += 1;
-        self.bus.write_memory(addr, data)
     }
     fn exec_opcode(&mut self, opcode: u8) {
         match opcode {
@@ -1043,7 +1072,7 @@ impl CPU {
         let p = self.st | 1 << BRK_CMD - 1;
         self.stack_push(p);
 
-        // load IRQ interrupt vector
+        // load BRK interrupt vector
         let low_addr = self.read_memory(BRK_IH);
         let hi_addr = self.read_memory(BRK_IH + 1);
 

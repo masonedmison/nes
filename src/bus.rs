@@ -17,6 +17,15 @@ impl Bus {
             ppu,
         }
     }
+    pub fn poll_generate_nmi(&self) -> bool {
+        self.ppu.poll_generate_nmi()
+    }
+    pub fn clear_generate_nmi(&mut self) { 
+        self.ppu.clear_generate_nmi()
+    }
+    pub fn tick(&mut self, cpu_cycles: u64) {
+        self.ppu.tick(cpu_cycles * 3)
+    }
     pub fn load_rom(&mut self, rom: Vec<u8>) {
         self.prgrom = rom;
     }

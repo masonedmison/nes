@@ -3,8 +3,6 @@ use super::{
     registers::{OAMADDR, OAMDATA, PPUADDR, PPUCTRL, PPUDATA, PPUMASK, PPUSCROLL, PPUSTATUS},
 };
 
-// TODO check how we are handling Mirroring - this might mean we need to
-// properly implement how we parse nes files...
 pub struct PPU {
     bus: PPUBus,
     oam: [u8; 64 * 4],
@@ -19,6 +17,10 @@ pub struct PPU {
     ppuscroll: PPUSCROLL,
     ppuaddr: PPUADDR,
     ppudata: PPUDATA,
+    // ********
+    nmi_pin: bool,
+    cycles: u64,
+    scanline: u16,
 }
 
 impl PPU {
@@ -30,17 +32,51 @@ impl PPU {
             ppuctrl: PPUCTRL::new(),
             ppumask: PPUMASK::new(),
             ppustatus: PPUSTATUS::new(),
-            oamaddr: OAMADDR ( 0 ),
-            oamdata: OAMDATA ( 0 ),
+            oamaddr: OAMADDR(0),
+            oamdata: OAMDATA(0),
             ppuscroll: PPUSCROLL::new(),
             ppuaddr: PPUADDR::new(),
-            ppudata: PPUDATA ( 0 ),
+            ppudata: PPUDATA(0),
+            nmi_pin: false,
+            cycles: 0,
+            scanline: 0,
+        }
+    }
+    pub fn poll_generate_nmi(&self) -> bool {
+        self.nmi_pin
+    }
+    pub fn clear_generate_nmi(&mut self) {
+        self.nmi_pin = false
+    }
+    pub fn tick(&mut self, cycles: u64) {
+        let mut remaining = cycles;
+        while remaining > 0 {
+            self.cycles += 1;
+            if self.cycles == 341 {
+                self.scanline += 1
+            }
+            if self.scanline == 241 && self.ppuctrl.contains(PPUCTRL::GENERATE_NMI) {
+                self.ppustatus.set(PPUSTATUS::VBLANK_START, true);
+                self.nmi_pin = true
+            } else if self.scanline == 261 {
+                self.scanline = 0;
+                self.ppustatus.set(PPUSTATUS::VBLANK_START, false);
+                self.nmi_pin = false
+            }
+            remaining -= 1
         }
     }
     // TODO In general, we aren't handling any of the tricky
     // edge cases mentioned on the Registers NESDev page
     pub fn write_ppu_ctrl(&mut self, data: u8) {
-        self.ppuctrl.update(data)
+        let prev_nmi_out = self.ppuctrl.contains(PPUCTRL::GENERATE_NMI);
+        self.ppuctrl.update(data);
+        if !prev_nmi_out
+            && self.ppuctrl.contains(PPUCTRL::GENERATE_NMI)
+            && self.ppustatus.contains(PPUSTATUS::VBLANK_START)
+        {
+            self.nmi_pin = true
+        }
     }
     pub fn write_ppumask(&mut self, data: u8) {
         self.ppumask.update(data)
@@ -69,7 +105,8 @@ impl PPU {
         self.w = !self.w;
     }
     pub fn increment_ppu_addr(&mut self) {
-        self.ppuaddr.increment_by(self.ppuctrl.contains(PPUCTRL::VRAM_ADDR_INCR))
+        self.ppuaddr
+            .increment_by(self.ppuctrl.contains(PPUCTRL::VRAM_ADDR_INCR))
     }
     // TODO ignoring the edge case where a read
     // is issued against an address between 0x3f00..0x3fff
@@ -84,9 +121,8 @@ impl PPU {
         self.increment_ppu_addr()
     }
     pub fn write_dma(&mut self, bytes: &[u8]) {
-        (self.oamaddr.0..=255).zip(bytes).for_each(|(idx, byte)| {
-            self.oam[idx as usize] = *byte
-        })
+        (self.oamaddr.0..=255)
+            .zip(bytes)
+            .for_each(|(idx, byte)| self.oam[idx as usize] = *byte)
     }
-
 }
