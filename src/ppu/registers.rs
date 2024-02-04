@@ -19,6 +19,9 @@ impl PPUCTRL {
     pub fn new() -> Self {
         PPUCTRL { bits: 0 }
     }
+    pub fn get_base_nt(&self) -> u8 {
+        self.bits & 0b00000011
+    }
     pub fn update(&mut self, value: u8) {
         self.bits = value
     }
